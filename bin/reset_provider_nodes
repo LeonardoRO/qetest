@@ -1,0 +1,122 @@
+#!/usr/bin/env python
+
+__author__ = 'Leonardo Oliveira (leonardo.ribeirooliv@rackspace.com)'
+
+'''
+reset_provider_nodes
+
+The script requires a single command line argument, the dataset to be used.
+
+For example:
+
+$ ./reset_provider_nodes qetest_buildbot
+
+'''
+
+import random
+import string
+import sys
+import time
+from libcloud.compute.types import Provider
+from libcloud.compute.providers import get_driver
+from cloudkick.webapp.dashboard import datasets
+
+if len(sys.argv) < 2:
+    sys.stderr.write('\nNo dataset specified on the command line')
+    sys.exit(1)
+
+a = datasets.DATASETS[sys.argv[1]]['data_definition']['accounts'][0]['providers'][0]
+
+try:
+    Driver = get_driver(Provider.OPENSTACK)
+    conn = Driver(a['api_key'], a['api_username'],
+                    ex_force_auth_url=a['api_url'],
+                    ex_force_auth_version='2.0_password')
+except Exception, error:
+    print '\nERROR: There was a problem creating a libcloud driver.  Failing\n'
+    print error
+    sys.exit(1)
+
+get_oldnodes = False
+for m in range(10):
+    try:
+        oldnodes = conn.list_nodes()
+        get_oldnodes = True
+        break
+    except Exception, error:
+        print error
+if not get_oldnodes:
+    print '\nERROR: Unable to retrieve list of existing nodes.  Failing\n'
+    sys.exit(1)
+
+if (len(oldnodes) > 0):
+    for oldnode in oldnodes:
+        print 'Deleting node %s' % oldnode.name
+        try:
+            conn.destroy_node(oldnode)
+            time.sleep(2)
+        except Exception, error:
+            print 'Unable to delete node %s' % oldnode.name
+            print error
+
+print '\nWaiting 15 seconds for nodes to be deleted\n'
+time.sleep(15)
+
+get_image = False
+for n in range(10):
+    try:
+        for i in conn.list_images():
+            if i.name and i.name[:12] == 'Ubuntu Lucid':
+                image = i
+        get_image = True
+    except Exception, error:
+        print error
+if not get_image:
+    print '\nUnable to retrieve list of available images.  Failing\n'
+    sys.exit(1)
+
+get_size = False
+for o in range(10):
+    try:
+        for s in conn.list_sizes():
+            if s.ram and s.ram == 256:
+                size = s
+        get_size = True
+    except Exception, error:
+        print error
+if not get_size:
+    print '\nUnable to retrieve list of available disk sizes.  Failing\n'
+    sys.exit(1)
+
+random_part = ''.join(random.sample(string.letters + string.digits, 6))
+for x in range(1, 11):
+    nodename = '%s-%s-%s' % (sys.argv[1], x, random_part)
+    print 'Creating node %s' % nodename
+    try:
+        conn.create_node(name=nodename, size=size, image=image)
+        time.sleep(2)
+    except Exception, error:
+        print 'Unable to delete node %s' % oldnode.name
+        print error
+
+print '\nWaiting 30 seconds for nodes to be available'
+time.sleep(30)
+
+get_newnodes = False
+for m in range(10):
+    try:
+        newnodes = conn.list_nodes()
+        get_newnodes = True
+        break
+    except Exception, error:
+        print error
+if not get_newnodes:
+    print '\nERROR: Unable to retrieve list of new nodes.  Failing\n'
+    sys.exit(1)
+
+if (len(newnodes) > 0):
+    print '\nGot %s node(s) from %s\n' % (len(newnodes), a['api_url'])
+    sys.exit(0)
+else:
+    print >> sys.stderr, '\nERROR: Returned node list for %s is empty. Failing\n' % sys.argv[1]
+    sys.exit(1)

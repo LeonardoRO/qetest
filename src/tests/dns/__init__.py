@@ -1,0 +1,3 @@
+__all__ = ['ALL_TEST_KLASSES',]
+
+ALL_TEST_KLASSES = []

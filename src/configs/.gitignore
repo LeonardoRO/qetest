@@ -1,0 +1,4 @@
+# Ignore local or custom nodeconf.py files
+##########################################
+local_nodeconf.py
+hostconf.py
